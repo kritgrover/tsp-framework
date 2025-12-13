@@ -255,7 +255,6 @@ def simulated_annealing_final(graph,
             delta = new_cost - current_cost
             
             if delta < 0 or math.exp(-delta / temp) > random.random():
-                # Accept
                 current_cost = new_cost
                 
                 if current_cost < best_cost:

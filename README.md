@@ -11,8 +11,7 @@ A unified, open-source framework for solving the Traveling Salesman Problem (TSP
 - [Installation](#installation)
 - [Usage](#usage)
 - [Methodology and Design Choices](#methodology-and-design-choices)
-- [Results and Findings](#results-and-findings)
-- [Future Directions](#future-directions)
+- [Contributing](#contributing)
 
 ## Introduction
 
@@ -249,7 +248,7 @@ The Simulated Annealing implementation follows the standard canonical structure:
 
 1. **Memory Management and Data Structures**: Reusable data structures were used to minimize repetitive object creation, reducing memory allocations by approximately 80%. Adjacency matrices were preprocessed into adjacency lists for O(1) neighbor lookups, dramatically accelerating neighbor generation and validation.
 
-2. **Algorithmic Efficiency**: Path validation and distance calculation utilize early termination to avoid unnecessary computation when encountering invalid edges. Although a single-pass implementation was initially explored, the current version leverages a shared utility function that maintains this fail-fast efficiency while promoting code reuse.
+2. **Algorithmic Efficiency**: Path validation and distance calculation utilize early termination to avoid unnecessary computation when encountering invalid edges.
 
 3. **Robust Initial Path Generation**: Instead of relying solely on random shuffles (which often fail on sparse graphs), a multi-strategy approach was used:
    - Greedy nearest-neighbor heuristics
@@ -293,15 +292,6 @@ The implementation of QAOA within a classical simulation environment introduces 
 
 3. **Approximation Quality vs. Circuit Depth**: As with any QAOA implementation, the quality of the solution depends on the number of layers, p. A larger p allows the algorithm to explore the solution space more thoroughly and can lead to better approximation ratios. However, this comes at the cost of a deeper quantum circuit, more parameters for the classical optimizer to handle, and longer simulation times.
 
-### Key Takeaways
-
-The results show a clear trade-off between optimality, performance, and solution quality:
-
-- **Brute Force**: Guarantees optimality but is not scalable
-- **Simulated Annealing**: Emerges as a highly effective method, achieving an excellent balance by consistently finding near-optimal solutions with minimal computational cost
-- **MST**: Despite being the fastest algorithm tested, it is inherently bounded by its theoretical 2-approximation limit, which constrains its solution quality
-- **QAOA**: Produced significantly suboptimal tours for the largest instances it could solve, consistent with reports that highlight the difficulty in tuning QUBO-based approaches to reliably find high-quality solutions
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. Areas for contribution include:
@@ -326,5 +316,5 @@ If you use this framework in your research, please cite:
 
 ## Acknowledgments
 
-This project was inspired by the ongoing debate about quantum advantage in combinatorial optimization and the need for empirical, implementation-level comparisons of classical and quantum TSP solvers.
+This project was inspired by the ongoing debate about quantum advantage in combinatorial optimization and the need for empirical, implementation-level comparisons of classical and quantum TSP solvers. The QAOA implementation in specific is based off the work of [Ruan et. al, 2020](https://www.researchgate.net/publication/341047640_The_Quantum_Approximate_Algorithm_for_Solving_Traveling_Salesman_Problem).
 
