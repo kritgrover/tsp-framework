@@ -189,7 +189,7 @@ def generate_neighbor_path_optimized(current_path, graph, adj_lists, neighbor_di
     return None
 
 def simulated_annealing_final(graph, 
-                            initial_temp=1000, 
+                            initial_temp=3000, 
                             cooling_rate=0.003, 
                             max_iter=10000,
                             visualize=True):
@@ -197,7 +197,7 @@ def simulated_annealing_final(graph,
     Optimized Simulated Annealing Solver for TSP.
     Matches the interface required by the framework.
     """
-    t_start = time.time()
+    t_start = time.perf_counter()
     n = len(graph)
     
     # Visualization Setup
@@ -231,17 +231,16 @@ def simulated_annealing_final(graph,
     # Pre-allocate reusable data structures
     path_set = set(current_path)
     temp_visited = set()
-    neighbor_distance = 2
+    neighbor_distance = 3
     
     temp = initial_temp
     no_improv_count = 0
-    no_improv_limit = 2000 # Default limit
+    no_improv_limit = 5000 # Default limit
     
     print(f"Starting Optimized Simulated Annealing (Max Iter: {max_iter})...")
     
     # 3. Annealing Loop
     for i in range(max_iter):
-        if temp < 0.1: break
         
         # Generate neighbor in-place (returns indices if swap made and valid)
         swap_indices = generate_neighbor_path_optimized(current_path, graph, adj_lists, 
@@ -294,7 +293,7 @@ def simulated_annealing_final(graph,
             ax.set_title(f"Iter {i} | Temp {temp:.1f} | Cost {current_cost}", fontsize=12)
             plt.pause(0.001)
     
-    t_end = time.time()
+    t_end = time.perf_counter()
     path_str = " -> ".join(map(str, best_path)) + f" -> {best_path[0]}"
     
     print("\n" + "="*40)

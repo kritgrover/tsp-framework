@@ -91,7 +91,7 @@ def tsp_solver_final(graph, visualize=True):
     """
     Optimized MST-based 2-Approximation TSP Solver.
     """
-    t_start = time.time()
+    t_start = time.perf_counter()
     n = len(graph)
     
     # 1. Compute MST (Prim's)
@@ -110,7 +110,8 @@ def tsp_solver_final(graph, visualize=True):
     # 4. Calculate Cost
     total_cost = calculate_path_cost(path, graph)
     
-    t_end = time.time()
+    t_end = time.perf_counter()
+    
     
     path_str = " -> ".join(map(str, path)) + f" -> {path[0]}"
     

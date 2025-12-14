@@ -22,16 +22,16 @@ def run_bruteforce(graph: list, visualize: bool = False, **params) -> TSPSolutio
     Returns:
         TSPSolution object
     """
-    t_start = time.time()
+    t_start = time.perf_counter()
     
     # Extract parameters
     update_frequency = params.get('update_frequency', None)
     
-    # Run algorithm (disable its own visualization, we'll handle it)
+    # Run algorithm
     result = bruteforce.tsp_solver_final(graph, visualize=False, 
                                        update_frequency=update_frequency)
     
-    t_end = time.time()
+    t_end = time.perf_counter()
     
     # Parse result: (best_cost, path_str, valid_count)
     best_cost, path_str, valid_count = result
@@ -39,7 +39,6 @@ def run_bruteforce(graph: list, visualize: bool = False, **params) -> TSPSolutio
     # Convert path string to list
     path = None
     if path_str:
-        # Parse "0 -> 1 -> 2 -> 0" format
         path = [int(x.strip()) for x in path_str.split('->')]
         # Remove duplicate start node at end if present
         if len(path) > 1 and path[0] == path[-1]:
@@ -72,12 +71,12 @@ def run_mst(graph: list, visualize: bool = False, **params) -> TSPSolution:
     Returns:
         TSPSolution object
     """
-    t_start = time.time()
+    t_start = time.perf_counter()
     
     # Run algorithm (disable its own visualization)
     result = mst.tsp_solver_final(graph, visualize=False)
     
-    t_end = time.time()
+    t_end = time.perf_counter()
     
     # Parse result: (path, total_cost)
     path, total_cost = result
@@ -110,7 +109,7 @@ def run_sim_annealing(graph: list, visualize: bool = False, **params) -> TSPSolu
     Returns:
         TSPSolution object
     """
-    t_start = time.time()
+    t_start = time.perf_counter()
     
     # Extract parameters
     initial_temp = params.get('sa_initial_temp', 1000)
@@ -126,7 +125,7 @@ def run_sim_annealing(graph: list, visualize: bool = False, **params) -> TSPSolu
         visualize=False
     )
     
-    t_end = time.time()
+    t_end = time.perf_counter()
     
     # Parse result: (best_cost, path_str)
     best_cost, path_str = result
@@ -171,7 +170,7 @@ def run_qaoa(graph: list, visualize: bool = False, **params) -> TSPSolution:
     Returns:
         TSPSolution object
     """
-    t_start = time.time()
+    t_start = time.perf_counter()
     
     # Extract parameters
     num_layers = params.get('qaoa_layers', 2)
@@ -192,7 +191,7 @@ def run_qaoa(graph: list, visualize: bool = False, **params) -> TSPSolution:
     # Decode solution
     path, cost = solver.decode_solution(bitstring)
     
-    t_end = time.time()
+    t_end = time.perf_counter()
     
     metadata = {
         'time_taken': t_end - t_start,
@@ -223,15 +222,6 @@ ALGORITHMS = {
 def get_algorithm(algorithm_name: str):
     """
     Get algorithm function by name.
-    
-    Args:
-        algorithm_name: Name of the algorithm
-    
-    Returns:
-        Algorithm function
-    
-    Raises:
-        ValueError: If algorithm name is not recognized
     """
     if algorithm_name not in ALGORITHMS:
         raise ValueError(f"Unknown algorithm: {algorithm_name}. "

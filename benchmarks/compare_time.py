@@ -11,9 +11,7 @@ from utils.algorithm_adapter import run_bruteforce, run_mst, run_sim_annealing, 
 
 def run_benchmark():
     # Define problem sizes
-    # Increased range to test MST and Simulated Annealing on larger graphs
-    # QAOA and Bruteforce are limited to smaller sizes
-    sizes = range(3, 21)
+    sizes = range(3, 31)
     
     algorithms = {
         'Bruteforce': run_bruteforce,
@@ -31,7 +29,7 @@ def run_benchmark():
         graph = generate_graph('fully_connected', num_nodes=n, seed=42)
         
         for name, func in algorithms.items():
-            # Apply limits for computationally expensive algorithms
+            # Apply limits
             if name == 'QAOA' and n > 5:
                 results[name].append(None)
                 continue
@@ -40,8 +38,6 @@ def run_benchmark():
                 continue
 
             try:
-                # Measure time directly here or use the metadata reported by the function
-                # Using metadata for consistency with internal measurement
                 solution = func(graph)
                 time_taken = solution.metadata.get('time_taken', 0)
                 results[name].append(time_taken)
@@ -66,16 +62,15 @@ def run_benchmark():
     plt.xlabel('Number of Cities')
     plt.ylabel('Execution Time (seconds)')
     plt.title('Execution Time vs Number of Cities')
-    plt.xticks(sizes) # Ensure x-axis shows integer values for cities
+    plt.xticks(sizes)
     plt.legend()
-    plt.yscale('log')  # Log scale usually better for time comparisons involving bruteforce
+    plt.yscale('log')
     
     # Set y-axis limits to ensure all algorithms are visible
     if all_times:
         min_time = min(all_times)
         max_time = max(all_times)
-        # Set bottom to 10^-5 to show very fast algorithms, add padding above max
-        plt.ylim(bottom=1e-5, top=max_time * 2)
+        plt.ylim(bottom=1e-4, top=max_time * 2)
     
     plt.grid(True, which='both', alpha=0.3)
     

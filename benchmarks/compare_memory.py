@@ -11,8 +11,6 @@ from utils.algorithm_adapter import run_bruteforce, run_mst, run_sim_annealing, 
 
 def run_benchmark():
     # Define problem sizes
-    # Increased range to test MST and Simulated Annealing on larger graphs
-    # QAOA and Bruteforce are limited to smaller sizes
     sizes = range(3, 21)
     
     algorithms = {
@@ -40,7 +38,7 @@ def run_benchmark():
                 continue
 
             try:
-                # Start tracing memory allocations
+                # Start tracing
                 tracemalloc.start()
                 
                 # Run algorithm
@@ -49,7 +47,6 @@ def run_benchmark():
                 # Get peak memory usage
                 current, peak = tracemalloc.get_traced_memory()
                 
-                # Stop tracing
                 tracemalloc.stop()
                 
                 # Convert bytes to MB
@@ -77,15 +74,14 @@ def run_benchmark():
     plt.xlabel('Number of Cities')
     plt.ylabel('Peak Memory Usage (MB)')
     plt.title('Memory Usage vs Number of Cities')
-    plt.xticks(sizes) # Ensure x-axis shows integer values for cities
+    plt.xticks(sizes)
     plt.legend()
-    plt.yscale('log')  # Log scale to show both small and large values
+    plt.yscale('log')
     
     # Set y-axis limits to ensure all algorithms are visible
     if all_mems:
         min_mem = min(all_mems)
         max_mem = max(all_mems)
-        # Add some padding: go slightly below min and above max
         plt.ylim(bottom=min_mem * 0.5, top=max_mem * 2)
     
     plt.grid(True, which='both', alpha=0.3)

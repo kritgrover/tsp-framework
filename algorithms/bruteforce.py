@@ -62,7 +62,7 @@ def tsp_solver_final(matrix, visualize=True, update_frequency=None):
     print(f"Starting optimized brute force search on {n} cities.")
     print(f"Checking {total_perms:,} permutations...")
     
-    t_start = time.time()
+    t_start = time.perf_counter()
     
     # Main Loop
     for idx, perm in enumerate(itertools.permutations(other_cities), 1):
@@ -95,7 +95,7 @@ def tsp_solver_final(matrix, visualize=True, update_frequency=None):
             ax.set_title(f"Iter {idx}/{total_perms} | Cost: {cost if valid else 'Inf'}", fontsize=12)
             plt.pause(0.001)
 
-    t_end = time.time()
+    t_end = time.perf_counter()
     
     # Final Result Display
     if best_path:

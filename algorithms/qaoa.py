@@ -185,7 +185,7 @@ class QAOATSPSolver:
         opt = qml.AdamOptimizer(stepsize=self.learning_rate)
         
         print(f"Optimizing for {self.steps} steps...")
-        t0 = time.time()
+        t0 = time.perf_counter()
         
         for i in range(self.steps):
             params, cost = opt.step_and_cost(cost_fn, params)
@@ -193,7 +193,7 @@ class QAOATSPSolver:
                 print(f"  Step {i+1}: Cost = {cost:.4f}")
                 
         self.optimal_params = params
-        t1 = time.time()
+        t1 = time.perf_counter()
         print(f"Optimization finished in {t1-t0:.2f}s.")
         
         # Get final result

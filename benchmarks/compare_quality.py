@@ -27,41 +27,14 @@ def run_benchmark():
     
     for n in sizes:
         print(f"Processing size {n}...")
-        # Generate a fully connected graph (complete graph) for all algorithms to solve
-        # This ensures every pair of cities is connected, guaranteeing valid TSP solutions
         graph = generate_graph('fully_connected', num_nodes=n, weight_range=(1, 100), seed=42)
-        
-        # Verify graph is fully connected (all non-diagonal entries should be > 0)
-        is_fully_connected = True
-        for i in range(n):
-            for j in range(n):
-                if i != j and graph[i][j] <= 0:
-                    is_fully_connected = False
-                    break
-            if not is_fully_connected:
-                break
-        
-        if not is_fully_connected:
-            print(f"  Warning: Graph for size {n} is not fully connected! Regenerating...")
-            # Regenerate with explicit parameters
-            graph = generate_graph('fully_connected', num_nodes=n, weight_range=(1, 100), seed=42+n)
-        
+
         # First, run bruteforce to get baseline cost
         bruteforce_cost = None
         try:
             print(f"  Running Bruteforce (baseline)...")
             bruteforce_solution = run_bruteforce(graph)
-            bruteforce_cost = bruteforce_solution.cost
-            
-            # Validate bruteforce solution
-            if bruteforce_cost is None or bruteforce_cost == float('inf') or bruteforce_cost <= 0:
-                print(f"  Warning: Bruteforce could not find a valid solution (cost: {bruteforce_cost})")
-                print(f"  Skipping size {n} - if bruteforce can't solve it, others likely can't either")
-                # If bruteforce fails, skip this size for all algorithms
-                for name in algorithms:
-                    ratios[name].append(None)
-                continue
-            
+            bruteforce_cost = bruteforce_solution.cost            
             print(f"  Baseline cost: {bruteforce_cost}")
         except Exception as e:
             print(f"  Error running Bruteforce: {e}")
@@ -70,15 +43,13 @@ def run_benchmark():
                 ratios[name].append(None)
             continue
         
-        # Now run other algorithms and calculate approximation ratios
         for name, func in algorithms.items():
-            # Apply limits for computationally expensive algorithms
             if name == 'QAOA' and n > 5:
                 ratios[name].append(None)
                 continue
-            
+
+            # Bruteforce is always 1.0
             if name == 'Bruteforce':
-                # Bruteforce is always 1.0 (baseline)
                 ratios[name].append(1.0)
             else:
                 try:
@@ -108,8 +79,8 @@ def run_benchmark():
     plt.xlabel('Number of Cities')
     plt.ylabel('Approximation Ratio')
     plt.title('Solution Quality Comparison (Approximation Ratios)')
-    plt.xticks(sizes)  # Ensure x-axis shows integer values for cities
-    plt.ylim(0.95, 3.0)  # Set y-axis range from 0.95 to 3.0 (space below 1.0 for visual appeal)
+    plt.xticks(sizes)
+    plt.ylim(0.95, 2.5)
     plt.legend()
     plt.grid(True, alpha=0.3)
     

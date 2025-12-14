@@ -118,11 +118,11 @@ solver3 = TSPSolver(
 
 # Example 4: Partially connected graph
 solver4 = TSPSolver(
-    algorithm='mst',
+    algorithm='bruteforce',
     graph_type='partially_connected',
     graph_params={
-        'num_nodes': 12,
-        'connectivity': 0.7,  # 70% of possible edges
+        'num_nodes': 6,
+        'connectivity': 1.0,
         'weight_range': (5, 50),
         'seed': 123
     }
@@ -148,7 +148,7 @@ solver6 = TSPSolver(
 # ============================================================================
 
 # After initialization, solve the problem:
-result = solver2.solve()
+result = solver4.solve()
 
 # Access results:
 print(f"Path: {result.path}")           # List of node indices
@@ -157,9 +157,9 @@ print(f"Algorithm: {result.algorithm}") # Algorithm used
 print(f"Metadata: {result.metadata}")  # Additional info (time, etc.)
 
 # Optional: Visualize separately (if visualize=False during init)
-solver2.visualize_result()  # Show solution
-solver2.visualize_graph()    # Show just the graph
+solver4.visualize_result()  # Show solution
+solver4.visualize_graph()    # Show just the graph
 
 # Get result without re-solving
-last_result = solver2.get_result()
+last_result = solver4.get_result()
 
