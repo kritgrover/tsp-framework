@@ -302,16 +302,12 @@ Contributions are welcome! Please feel free to submit a Pull Request. Areas for 
 - Documentation improvements
 - Test coverage
 
-## License
-
-MIT
-
 ## Citation
 
 If you use this framework in your research, please cite:
 
 ```bibtex
-[Add citation information]
+A Comparative Study on Classical and Quantum Approaches to the Traveling Salesman Problem. Krit Grover, Marcelo Ponce, 2025.
 ```
 
 ## Acknowledgments
