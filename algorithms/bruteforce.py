@@ -72,7 +72,7 @@ def tsp_solver_final(matrix, visualize=True, update_frequency=None):
             current_path[i+1] = city
             
         # Calculate Cost
-        cost = calculate_path_cost(current_path, matrix)
+        cost = calculate_path_cost(current_path[:-1], matrix)
         
         if cost != float('inf'):
             valid_count += 1
