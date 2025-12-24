@@ -59,7 +59,7 @@ def visualize_solution(graph: List[List[float]], path: List[int], cost: float,
     # Set title
     if title is None:
         title = f"{algorithm_name.upper()} Solution | Cost: {cost:.2f}"
-    plt.title(title, fontsize=14, fontweight='bold', pad=20)
+    plt.title(title, fontsize=20, fontweight='bold', pad=30)
     
     plt.axis('off')
     plt.tight_layout()
