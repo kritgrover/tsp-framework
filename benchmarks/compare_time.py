@@ -33,7 +33,7 @@ def run_benchmark():
             if name == 'QAOA' and n > 5:
                 results[name].append(None)
                 continue
-            if name == 'Bruteforce' and n > 10:
+            if name == 'Bruteforce' and n > 15:
                 results[name].append(None)
                 continue
 
@@ -70,7 +70,7 @@ def run_benchmark():
     if all_times:
         min_time = min(all_times)
         max_time = max(all_times)
-        plt.ylim(bottom=1e-4, top=max_time * 2)
+        plt.ylim(bottom=1e-5, top=max_time * 2)
     
     plt.grid(True, which='both', alpha=0.3)
     

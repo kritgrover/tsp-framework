@@ -33,7 +33,7 @@ def run_benchmark():
             if name == 'QAOA' and n > 5:
                 results[name].append(None)
                 continue
-            if name == 'Bruteforce' and n > 10:
+            if name == 'Bruteforce' and n > 15:
                 results[name].append(None)
                 continue
 
