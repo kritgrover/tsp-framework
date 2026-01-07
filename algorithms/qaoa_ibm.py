@@ -221,26 +221,14 @@ class QAOATSPSolver:
         """Execute QAOA on IBM Runtime."""
         
         if self.use_real_hardware:
-            # Hybrid approach: optimize locally (fast), then sample on real hardware
-            # This avoids the qubit mismatch issue with QAOA + IBM hardware transpilation
-            from qiskit.primitives import StatevectorSampler
+            print("\n" + "="*60)
+            print("  FULL QUANTUM OPTIMIZATION MODE")
+            print("  All optimization iterations will run on IBM Quantum hardware")
+            print("  WARNING: This will be SLOW due to queue times!")
+            print("="*60)
             
-            print("\n--- HYBRID MODE: Local Optimization + IBM Hardware Sampling ---")
-            
-            # 1. Optimize parameters using fast local simulation
-            print("1. Optimizing parameters locally (fast)...")
-            local_sampler = StatevectorSampler()
-            optimizer = COBYLA(maxiter=self.steps)  # COBYLA works well for simulation
-            
-            qaoa = QAOA(sampler=local_sampler, optimizer=optimizer, reps=self.n_layers,
-                        initial_state=self.initial_state, mixer=self.mixer_op)
-            
-            local_result = qaoa.compute_minimum_eigenvalue(self.cost_op)
-            optimal_params = local_result.optimal_point
-            print(f"   Local optimization done. Eigenvalue: {local_result.eigenvalue}")
-            
-            # 2. Connect to IBM Quantum for final sampling
-            print("2. Connecting to IBM Quantum...")
+            # 1. Connect to IBM Quantum
+            print("\n1. Connecting to IBM Quantum...")
             service = QiskitRuntimeService()
             
             if self.backend_name:
@@ -253,52 +241,123 @@ class QAOATSPSolver:
             else:
                 raise ValueError("Either backend_name must be specified or use_least_busy must be True")
             
-            # 3. Build and transpile the final circuit with optimal parameters
-            print("3. Transpiling circuit for hardware...")
+            # 2. Build the QAOA ansatz
+            print("\n2. Building QAOA ansatz...")
             ansatz = QAOAAnsatz(self.cost_op, reps=self.n_layers,
                                initial_state=self.initial_state, mixer_operator=self.mixer_op)
+            print(f"   Ansatz has {ansatz.num_parameters} parameters")
             
-            # Bind optimal parameters to circuit
-            bound_circuit = ansatz.assign_parameters(optimal_params)
-            
-            # Add measurement to all qubits
-            bound_circuit.measure_all()
-            
-            # Transpile for target backend
+            # 3. Transpile the parametrized circuit for the backend
+            print("\n3. Transpiling circuit for hardware...")
             pm = generate_preset_pass_manager(backend=backend, optimization_level=3)
-            isa_circuit = pm.run(bound_circuit)
-            print(f"   Circuit transpiled: {isa_circuit.num_qubits} physical qubits")
+            isa_ansatz = pm.run(ansatz)
+            print(f"   Transpiled circuit: {isa_ansatz.num_qubits} physical qubits, depth {isa_ansatz.depth()}")
             
-            # 4. Sample on real hardware
-            print("4. Sampling on IBM Quantum hardware...")
+            # Store the final layout mapping (logical qubit -> physical qubit)
+            # This is crucial for correctly interpreting measurement results
+            if isa_ansatz.layout is not None:
+                self._final_layout = isa_ansatz.layout.final_index_layout()
+                print(f"   Qubit mapping (logical->physical): {self._final_layout[:self.num_qubits]}")
+            else:
+                self._final_layout = None
+            
+            # 4. Create sampler for quantum hardware
             sampler = SamplerV2(mode=backend)
             
-            job = sampler.run([isa_circuit])
-            print(f"   Job submitted: {job.job_id()}")
-            print("   Waiting for results (this may take a while in queue)...")
+            # 5. Custom optimization loop on quantum hardware
+            print(f"\n4. Starting QAOA optimization ({self.steps} iterations)...")
+            print("   Each iteration submits a job to IBM Quantum.")
             
-            pub_result = job.result()[0]
+            # Initialize parameters randomly
+            num_params = ansatz.num_parameters
+            params = np.random.uniform(0, np.pi, size=num_params)
             
-            # Extract counts - measurement register name varies
-            try:
-                counts = pub_result.data.meas.get_counts()
-            except AttributeError:
-                # Try alternate accessor names
-                data_keys = list(pub_result.data.keys())
-                if data_keys:
-                    counts = getattr(pub_result.data, data_keys[0]).get_counts()
-                else:
-                    print("Warning: Could not extract counts from result")
-                    return None, float('inf')
+            # Use SPSA optimizer (good for noisy quantum hardware, requires fewer circuit evaluations)
+            # SPSA only needs 2 circuit evaluations per iteration (vs 2*num_params for finite-difference)
+            best_cost = float('inf')
+            best_params = params.copy()
+            best_counts = None
             
-            print(f"   Got {len(counts)} unique measurement outcomes")
-            return self._process_counts(counts)
+            # SPSA hyperparameters
+            a = 0.1  # Step size scaling
+            c = 0.1  # Perturbation size
+            A = self.steps * 0.1  # Stability constant
+            alpha = 0.602
+            gamma = 0.101
+            
+            for iteration in range(self.steps):
+                # SPSA step size schedule
+                ak = a / ((iteration + 1 + A) ** alpha)
+                ck = c / ((iteration + 1) ** gamma)
+                
+                # Generate random perturbation direction
+                delta = np.random.choice([-1, 1], size=num_params)
+                
+                # Perturbed parameter sets
+                params_plus = params + ck * delta
+                params_minus = params - ck * delta
+                
+                # Build circuits with perturbed parameters
+                circuit_plus = isa_ansatz.assign_parameters(params_plus)
+                circuit_minus = isa_ansatz.assign_parameters(params_minus)
+                circuit_plus.measure_all()
+                circuit_minus.measure_all()
+                
+                # Submit both circuits in one job (more efficient)
+                print(f"\n   Iteration {iteration + 1}/{self.steps}: Submitting job...")
+                job = sampler.run([circuit_plus, circuit_minus], shots=1024)
+                print(f"   Job ID: {job.job_id()}")
+                print("   Waiting for results...")
+                
+                result = job.result()
+                
+                # Extract counts and compute costs
+                counts_plus = self._extract_counts(result[0])
+                counts_minus = self._extract_counts(result[1])
+                
+                cost_plus = self._compute_expectation_from_counts(counts_plus)
+                cost_minus = self._compute_expectation_from_counts(counts_minus)
+                
+                # SPSA gradient estimate
+                gradient = (cost_plus - cost_minus) / (2 * ck) * delta
+                
+                # Update parameters
+                params = params - ak * gradient
+                
+                # Track best solution found
+                current_cost = (cost_plus + cost_minus) / 2
+                print(f"   Cost+: {cost_plus:.4f}, Cost-: {cost_minus:.4f}, Avg: {current_cost:.4f}")
+                
+                if cost_plus < best_cost:
+                    best_cost = cost_plus
+                    best_params = params_plus.copy()
+                    best_counts = counts_plus
+                if cost_minus < best_cost:
+                    best_cost = cost_minus
+                    best_params = params_minus.copy()
+                    best_counts = counts_minus
+            
+            # 6. Final sampling with best parameters
+            print(f"\n5. Final sampling with best parameters (cost={best_cost:.4f})...")
+            final_circuit = isa_ansatz.assign_parameters(best_params)
+            final_circuit.measure_all()
+            
+            job = sampler.run([final_circuit], shots=4096)
+            print(f"   Job ID: {job.job_id()}")
+            print("   Waiting for final results...")
+            
+            final_result = job.result()
+            final_counts = self._extract_counts(final_result[0])
+            
+            print(f"   Got {len(final_counts)} unique measurement outcomes")
+            return self._process_counts(final_counts)
                 
         else:
             # Local Simulation fallback using qiskit's built-in sampler
             from qiskit.primitives import StatevectorSampler
             
             print("\n--- RUNNING LOCAL SIMULATION ---")
+            self._final_layout = None  # No qubit remapping for local simulation
             local_sampler = StatevectorSampler()
             optimizer = COBYLA(maxiter=self.steps)
             
@@ -318,6 +377,55 @@ class QAOATSPSolver:
                 return self._decode_solution(best_bitstring)
             
             return None, None
+    
+    def _extract_counts(self, pub_result):
+        """Extract measurement counts from a PubResult object."""
+        try:
+            return pub_result.data.meas.get_counts()
+        except AttributeError:
+            # Try alternate accessor names
+            data_keys = list(pub_result.data.keys())
+            if data_keys:
+                return getattr(pub_result.data, data_keys[0]).get_counts()
+            return {}
+    
+    def _compute_expectation_from_counts(self, counts):
+        """
+        Compute the cost Hamiltonian expectation value from measurement counts.
+        H_C = sum(-w_ij/2 * Z_ij) where Z_ij = 1 if qubit is |0⟩, -1 if |1⟩
+        """
+        total_shots = sum(counts.values())
+        expectation = 0.0
+        
+        for bitstring, count in counts.items():
+            # Compute cost for this bitstring
+            # Bitstring is in Qiskit format: rightmost bit = physical qubit 0
+            cost = 0.0
+            bs_len = len(bitstring)
+            
+            for logical_idx, (u, v) in enumerate(self.edges):
+                weight = self.dist[u][v]
+                
+                # Map logical qubit to physical qubit using transpilation layout
+                if hasattr(self, '_final_layout') and self._final_layout is not None:
+                    physical_idx = self._final_layout[logical_idx]
+                else:
+                    physical_idx = logical_idx  # No remapping for local simulation
+                
+                # In Qiskit bitstring, physical qubit i is at position (len-1-i) from left
+                bit_pos = bs_len - 1 - physical_idx
+                if 0 <= bit_pos < bs_len:
+                    bit_val = int(bitstring[bit_pos])
+                else:
+                    bit_val = 0  # Default if out of range
+                    
+                # Z eigenvalue: |0⟩ -> +1, |1⟩ -> -1
+                z_val = 1 - 2 * bit_val
+                cost += (-weight / 2.0) * z_val
+            
+            expectation += cost * count
+        
+        return expectation / total_shots
 
     def _process_counts(self, counts):
         """Find most frequent valid bitstring in counts."""
@@ -325,11 +433,21 @@ class QAOATSPSolver:
         sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
         
         for bs, count in sorted_counts:
-            # Convert back to edges
-            rev_bs = bs[::-1]
+            # Remap physical qubits back to logical qubits using transpilation layout
+            bs_len = len(bs)
             edges = []
-            for i, bit in enumerate(rev_bs):
-                if bit == '1': edges.append(self.edges[i])
+            
+            for logical_idx in range(self.num_qubits):
+                # Map logical qubit to physical qubit
+                if hasattr(self, '_final_layout') and self._final_layout is not None:
+                    physical_idx = self._final_layout[logical_idx]
+                else:
+                    physical_idx = logical_idx  # No remapping for local simulation
+                
+                # In Qiskit bitstring, physical qubit i is at position (len-1-i) from left
+                bit_pos = bs_len - 1 - physical_idx
+                if 0 <= bit_pos < bs_len and bs[bit_pos] == '1':
+                    edges.append(self.edges[logical_idx])
             
             if self._is_cycle(edges):
                 cost = self._calculate_cost(edges)
@@ -345,10 +463,22 @@ class QAOATSPSolver:
         return c
 
     def _decode_solution(self, bs):
-        rev_bs = bs[::-1]
+        """Decode a bitstring to edges using layout mapping if available."""
+        bs_len = len(bs)
         edges = []
-        for i, bit in enumerate(rev_bs):
-            if bit == '1': edges.append(self.edges[i])
+        
+        for logical_idx in range(self.num_qubits):
+            # Map logical qubit to physical qubit
+            if hasattr(self, '_final_layout') and self._final_layout is not None:
+                physical_idx = self._final_layout[logical_idx]
+            else:
+                physical_idx = logical_idx  # No remapping for local simulation
+            
+            # In Qiskit bitstring, physical qubit i is at position (len-1-i) from left
+            bit_pos = bs_len - 1 - physical_idx
+            if 0 <= bit_pos < bs_len and bs[bit_pos] == '1':
+                edges.append(self.edges[logical_idx])
+                
         return edges, self._calculate_cost(edges)
 
 if __name__ == "__main__":
@@ -377,8 +507,8 @@ if __name__ == "__main__":
         # with your IBM Quantum API token
         solver = QAOATSPSolver(
             distance_matrix=graph, 
-            num_layers=1, 
-            optimization_steps=20, 
+            num_layers=3, 
+            optimization_steps=20,  # Keep low for real hardware (each iteration = 1 job) 
             backend_name=BACKEND_NAME,
             use_real_hardware=USE_IBM,
             use_least_busy=USE_LEAST_BUSY
