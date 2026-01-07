@@ -8,6 +8,7 @@ from utils.result import TSPSolution
 from utils.visualizer import visualize_solution
 from algorithms import bruteforce, mst, sim_annealing
 from algorithms.qaoa import QAOATSPSolver
+from algorithms.qaoa_ibm import QAOAIBMSolver
 
 
 def run_bruteforce(graph: list, visualize: bool = False, **params) -> TSPSolution:
@@ -210,12 +211,86 @@ def run_qaoa(graph: list, visualize: bool = False, **params) -> TSPSolution:
     return solution
 
 
+def run_qaoa_ibm(graph: list, visualize: bool = False, **params) -> TSPSolution:
+    """
+    Run QAOA algorithm on IBM Quantum hardware with standardized interface.
+    
+    Args:
+        graph: Distance matrix (2D list)
+        visualize: Whether to visualize the solution
+        **params: Algorithm-specific parameters:
+            - qaoa_layers: Number of QAOA layers (default: 2)
+            - qaoa_optimization_steps: Optimization steps (default: 100)
+            - ibm_backend: IBM backend name (default: 'ibm_brisbane')
+            - ibm_token: IBM Quantum API token (optional)
+            - ibm_channel: 'ibm_cloud' or 'ibm_quantum' (default: 'ibm_cloud')
+            - ibm_instance: IBM Cloud instance CRN (optional)
+            - shots: Number of measurement shots (default: 1024)
+            - use_ibm_backend: If False, uses local simulation (default: True)
+    
+    Returns:
+        TSPSolution object
+    """
+    t_start = time.perf_counter()
+    
+    # Extract parameters
+    num_layers = params.get('qaoa_layers', 2)
+    optimization_steps = params.get('qaoa_optimization_steps', 100)
+    ibm_backend = params.get('ibm_backend', 'ibm_brisbane')
+    ibm_token = params.get('ibm_token', None)
+    ibm_channel = params.get('ibm_channel', 'ibm_cloud')
+    ibm_instance = params.get('ibm_instance', None)
+    shots = params.get('shots', 1024)
+    use_ibm_backend = params.get('use_ibm_backend', True)
+    
+    # Create solver
+    solver = QAOAIBMSolver(
+        graph,
+        num_qaoa_layers=num_layers,
+        optimization_steps=optimization_steps,
+        use_ibm_backend=use_ibm_backend,
+        ibm_backend=ibm_backend,
+        ibm_token=ibm_token,
+        ibm_channel=ibm_channel,
+        ibm_instance=ibm_instance,
+        shots=shots
+    )
+    
+    # Run algorithm
+    bitstring, prob = solver.solve()
+    
+    # Decode solution
+    path, cost = solver.decode_solution(bitstring)
+    
+    t_end = time.perf_counter()
+    
+    metadata = {
+        'time_taken': t_end - t_start,
+        'num_layers': num_layers,
+        'optimization_steps': optimization_steps,
+        'ibm_backend': ibm_backend if use_ibm_backend else 'local_simulator',
+        'shots': shots,
+        'probability': prob,
+        'bitstring': bitstring
+    }
+    
+    solution = TSPSolution(path, cost, 'qaoa_ibm', metadata)
+    
+    # Visualize if requested
+    if visualize and path:
+        backend_name = f"QAOA (IBM: {ibm_backend})" if use_ibm_backend else "QAOA (Local Sim)"
+        visualize_solution(graph, path, cost, backend_name)
+    
+    return solution
+
+
 # Algorithm registry
 ALGORITHMS = {
     'bruteforce': run_bruteforce,
     'mst': run_mst,
     'sim_annealing': run_sim_annealing,
-    'qaoa': run_qaoa
+    'qaoa': run_qaoa,
+    'qaoa_ibm': run_qaoa_ibm
 }
 
 
