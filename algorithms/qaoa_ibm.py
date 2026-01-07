@@ -60,35 +60,157 @@ class QAOATSPSolver:
         self.initial_state = self._build_initial_state()
 
     def _get_valid_cycles(self) -> List[str]:
-        """Find all valid Hamiltonian cycles (brute-force for small N)."""
-        valid = []
-        # A tour must have exactly N edges
-        for edge_indices in combinations(range(self.num_qubits), self.num_cities):
-            chosen_edges = [self.edges[i] for i in edge_indices]
-            if self._is_cycle(chosen_edges):
-                # Create bitstring (little-endian: q0 is rightmost)
-                # We map index i -> qubit i.
-                bs = ['0'] * self.num_qubits
-                for idx in edge_indices:
-                    bs[idx] = '1'
-                # Reverse for Qiskit's standard "q_n ... q_0" representation
-                valid.append("".join(bs[::-1]))
-        return valid
+        """
+        Generate all valid Hamiltonian cycles efficiently.
+        
+        Instead of checking all C(E, N) edge combinations (exponential),
+        we directly generate cycles by permuting intermediate nodes.
+        This produces exactly (N-1)!/2 unique cycles.
+        
+        Based on Algorithm 1 from Ruan et al. (2020):
+        "The Quantum Approximate Algorithm for Solving Traveling Salesman Problem"
+        
+        Complexity: O((N-1)!/2 * N) instead of O(C(N(N-1)/2, N) * N²)
+        """
+        from itertools import permutations
+        
+        valid = set()  # Use set to avoid duplicates
+        n = self.num_cities
+        
+        # Fix starting node as 0 to avoid rotational duplicates
+        # Generate all permutations of remaining nodes
+        other_nodes = list(range(1, n))
+        
+        for perm in permutations(other_nodes):
+            # Build cycle: 0 -> perm[0] -> perm[1] -> ... -> perm[-1] -> 0
+            cycle = [0] + list(perm)
+            
+            # Convert cycle to edge set (canonical form to handle direction)
+            edges = []
+            for i in range(n):
+                u, v = cycle[i], cycle[(i + 1) % n]
+                edges.append(tuple(sorted((u, v))))
+            
+            # Convert to bitstring
+            bs = self._edges_to_bitstring(edges)
+            valid.add(bs)
+        
+        return list(valid)
+    
+    def _edges_to_bitstring(self, edges) -> str:
+        """Convert a list of edges to a bitstring representation."""
+        # Create edge to index lookup
+        edge_to_idx = {tuple(sorted(e)): i for i, e in enumerate(self.edges)}
+        
+        bs = ['0'] * self.num_qubits
+        for edge in edges:
+            idx = edge_to_idx[tuple(sorted(edge))]
+            bs[idx] = '1'
+        
+        # Reverse for Qiskit's standard "q_n ... q_0" representation
+        return "".join(bs[::-1])
+    
+    def _validate_bitstring(self, bitstring: str) -> bool:
+        """
+        Algorithm 1 from Ruan et al. (2020): O(N²) validation.
+        
+        Checks if a bitstring represents a valid Hamiltonian cycle:
+        1. Exactly N edges selected (N = num_cities)
+        2. Each vertex has degree exactly 2
+        3. Edges form a single connected cycle
+        
+        Args:
+            bitstring: Binary string in Qiskit format (reversed)
+            
+        Returns:
+            True if valid Hamiltonian cycle, False otherwise
+        """
+        n = self.num_cities
+        
+        # Reverse bitstring to match edge indexing
+        bs = bitstring[::-1]
+        
+        # Count selected edges and build adjacency
+        selected_count = 0
+        degrees = [0] * n
+        adj = [[] for _ in range(n)]
+        
+        for i, bit in enumerate(bs):
+            if i >= len(self.edges):
+                break
+            if bit == '1':
+                selected_count += 1
+                u, v = self.edges[i]
+                degrees[u] += 1
+                degrees[v] += 1
+                adj[u].append(v)
+                adj[v].append(u)
+        
+        # Check 1: Must have exactly N edges
+        if selected_count != n:
+            return False
+        
+        # Check 2: Every vertex must have degree 2
+        if any(d != 2 for d in degrees):
+            return False
+        
+        # Check 3: Must form single connected cycle (DFS from node 0)
+        visited = [False] * n
+        stack = [0]
+        visit_count = 0
+        
+        while stack:
+            node = stack.pop()
+            if visited[node]:
+                continue
+            visited[node] = True
+            visit_count += 1
+            for neighbor in adj[node]:
+                if not visited[neighbor]:
+                    stack.append(neighbor)
+        
+        return visit_count == n
 
     def _is_cycle(self, edges):
-        """Check if edges form a single Hamiltonian cycle."""
+        """
+        Check if edges form a single Hamiltonian cycle. O(N²) complexity.
+        Used for result validation after quantum measurement.
+        """
+        n = self.num_cities
+        
+        # Check edge count
+        if len(edges) != n:
+            return False
+        
         # Check degree constraint (every node degree 2)
-        degrees = {i: 0 for i in range(self.num_cities)}
+        degrees = [0] * n
+        adj = [[] for _ in range(n)]
+        
         for u, v in edges:
             degrees[u] += 1
             degrees[v] += 1
-        if any(d != 2 for d in degrees.values()):
+            adj[u].append(v)
+            adj[v].append(u)
+        
+        if any(d != 2 for d in degrees):
             return False
         
-        # Check connectivity (single loop)
-        g = nx.Graph()
-        g.add_edges_from(edges)
-        return nx.is_connected(g) and g.number_of_nodes() == self.num_cities
+        # Check connectivity using DFS (O(N))
+        visited = [False] * n
+        stack = [0]
+        visit_count = 0
+        
+        while stack:
+            node = stack.pop()
+            if visited[node]:
+                continue
+            visited[node] = True
+            visit_count += 1
+            for neighbor in adj[node]:
+                if not visited[neighbor]:
+                    stack.append(neighbor)
+        
+        return visit_count == n
 
     def _build_cost_operator(self) -> SparsePauliOp:
         """H_C = sum(w_ij * x_ij). Maps x_ij -> (I - Z)/2."""
@@ -264,85 +386,78 @@ class QAOATSPSolver:
             # 4. Create sampler for quantum hardware
             sampler = SamplerV2(mode=backend)
             
-            # 5. Custom optimization loop on quantum hardware
-            print(f"\n4. Starting QAOA optimization ({self.steps} iterations)...")
-            print("   Each iteration submits a job to IBM Quantum.")
+            # 5. Nelder-Mead optimization on quantum hardware
+            print(f"\n4. Starting Nelder-Mead optimization on quantum hardware (max {self.steps} evaluations)...")
+            print("   Each function evaluation submits a job to IBM Quantum.")
             
-            # Initialize parameters randomly
+            # Initialize parameters with small random values
             num_params = ansatz.num_parameters
-            params = np.random.uniform(0, np.pi, size=num_params)
+            initial_params = np.random.uniform(0, 0.5, size=num_params)
             
-            # Use SPSA optimizer (good for noisy quantum hardware, requires fewer circuit evaluations)
-            # SPSA only needs 2 circuit evaluations per iteration (vs 2*num_params for finite-difference)
-            best_cost = float('inf')
-            best_params = params.copy()
-            best_counts = None
+            # Track best solution and evaluation count
+            self._eval_count = 0
+            self._best_cost = float('inf')
+            self._best_params = initial_params.copy()
+            self._best_counts = None
             
-            # SPSA hyperparameters
-            a = 0.1  # Step size scaling
-            c = 0.1  # Perturbation size
-            A = self.steps * 0.1  # Stability constant
-            alpha = 0.602
-            gamma = 0.101
-            
-            for iteration in range(self.steps):
-                # SPSA step size schedule
-                ak = a / ((iteration + 1 + A) ** alpha)
-                ck = c / ((iteration + 1) ** gamma)
+            def cost_function(params):
+                """Objective function evaluated on quantum hardware."""
+                self._eval_count += 1
                 
-                # Generate random perturbation direction
-                delta = np.random.choice([-1, 1], size=num_params)
+                # Build circuit with current parameters
+                circuit = isa_ansatz.assign_parameters(params)
+                circuit.measure_all()
                 
-                # Perturbed parameter sets
-                params_plus = params + ck * delta
-                params_minus = params - ck * delta
-                
-                # Build circuits with perturbed parameters
-                circuit_plus = isa_ansatz.assign_parameters(params_plus)
-                circuit_minus = isa_ansatz.assign_parameters(params_minus)
-                circuit_plus.measure_all()
-                circuit_minus.measure_all()
-                
-                # Submit both circuits in one job (more efficient)
-                print(f"\n   Iteration {iteration + 1}/{self.steps}: Submitting job...")
-                job = sampler.run([circuit_plus, circuit_minus], shots=1024)
+                # Submit job to quantum hardware
+                print(f"\n   Evaluation {self._eval_count}: Submitting job...")
+                job = sampler.run([circuit], shots=2048)
                 print(f"   Job ID: {job.job_id()}")
                 print("   Waiting for results...")
                 
                 result = job.result()
+                counts = self._extract_counts(result[0])
+                cost = self._compute_expectation_from_counts(counts)
                 
-                # Extract counts and compute costs
-                counts_plus = self._extract_counts(result[0])
-                counts_minus = self._extract_counts(result[1])
+                print(f"   Cost: {cost:.4f}")
                 
-                cost_plus = self._compute_expectation_from_counts(counts_plus)
-                cost_minus = self._compute_expectation_from_counts(counts_minus)
+                # Track best solution
+                if cost < self._best_cost:
+                    self._best_cost = cost
+                    self._best_params = params.copy()
+                    self._best_counts = counts
                 
-                # SPSA gradient estimate
-                gradient = (cost_plus - cost_minus) / (2 * ck) * delta
-                
-                # Update parameters
-                params = params - ak * gradient
-                
-                # Track best solution found
-                current_cost = (cost_plus + cost_minus) / 2
-                print(f"   Cost+: {cost_plus:.4f}, Cost-: {cost_minus:.4f}, Avg: {current_cost:.4f}")
-                
-                if cost_plus < best_cost:
-                    best_cost = cost_plus
-                    best_params = params_plus.copy()
-                    best_counts = counts_plus
-                if cost_minus < best_cost:
-                    best_cost = cost_minus
-                    best_params = params_minus.copy()
-                    best_counts = counts_minus
+                return cost
             
-            # 6. Final sampling with best parameters
+            # Run Nelder-Mead optimization
+            from scipy.optimize import minimize
+            
+            result = minimize(
+                cost_function,
+                initial_params,
+                method='Nelder-Mead',
+                options={
+                    'maxfev': self.steps,  # Maximum function evaluations
+                    'xatol': 0.01,         # Parameter tolerance
+                    'fatol': 0.01,         # Function value tolerance
+                    'adaptive': True       # Adapt algorithm parameters to dimensionality
+                }
+            )
+            
+            print(f"\n   Optimization finished after {self._eval_count} evaluations")
+            print(f"   Final cost from optimizer: {result.fun:.4f}")
+            print(f"   Best cost found: {self._best_cost:.4f}")
+            
+            # Use best parameters found during optimization
+            best_params = self._best_params
+            best_cost = self._best_cost
+            
+            # 5. Final sampling with best parameters (increased shots for accuracy)
             print(f"\n5. Final sampling with best parameters (cost={best_cost:.4f})...")
             final_circuit = isa_ansatz.assign_parameters(best_params)
             final_circuit.measure_all()
             
-            job = sampler.run([final_circuit], shots=4096)
+            # Increased shots for more accurate final sampling (was 4096)
+            job = sampler.run([final_circuit], shots=8192)
             print(f"   Job ID: {job.job_id()}")
             print("   Waiting for final results...")
             
@@ -508,7 +623,7 @@ if __name__ == "__main__":
         solver = QAOATSPSolver(
             distance_matrix=graph, 
             num_layers=3, 
-            optimization_steps=20,  # Keep low for real hardware (each iteration = 1 job) 
+            optimization_steps=10,  # Keep low for real hardware (each iteration = 1 job) 
             backend_name=BACKEND_NAME,
             use_real_hardware=USE_IBM,
             use_least_busy=USE_LEAST_BUSY
