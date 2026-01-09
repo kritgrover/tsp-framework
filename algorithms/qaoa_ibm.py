@@ -1,7 +1,6 @@
 import numpy as np
-import networkx as nx
 from itertools import combinations
-from typing import List, Tuple
+from typing import List
 
 # Qiskit Core
 from qiskit import QuantumCircuit
@@ -11,14 +10,15 @@ from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
 # Qiskit Algorithms & Optimization
 from qiskit_algorithms import QAOA
-from qiskit_algorithms.optimizers import SPSA, COBYLA
+from qiskit_algorithms.optimizers import COBYLA
 
 # IBM Runtime (no Session needed for Open Plan)
 from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2
 
 class QAOATSPSolver:
-    def __init__(self, distance_matrix, num_layers=2, optimization_steps=100, 
-                 backend_name=None, use_real_hardware=False, use_least_busy=True):
+    def __init__(self, distance_matrix, 
+                num_layers=2, optimization_steps=100,
+                use_real_hardware=True):
         """
         Initialize QAOA TSP Solver.
         
@@ -26,20 +26,14 @@ class QAOATSPSolver:
             distance_matrix: NxN distance matrix between cities
             num_layers: Number of QAOA layers (reps)
             optimization_steps: Max iterations for optimizer
-            backend_name: Specific IBM backend name (e.g., 'ibm_brisbane'). 
-                         If None and use_least_busy=True, selects least busy backend.
             use_real_hardware: If True, runs on IBM Quantum hardware; else local simulation
-            use_least_busy: If True and backend_name is None, automatically selects 
-                           the least busy operational backend
         """
         self.dist = np.array(distance_matrix)
         self.num_cities = len(distance_matrix)
         self.n_layers = num_layers
         self.steps = optimization_steps
-        self.backend_name = backend_name
         self.use_real_hardware = use_real_hardware
-        self.use_least_busy = use_least_busy
-        
+
         # 1. Edge Mapping (Paper Section 3.1)
         # N cities -> N(N-1)/2 qubits.
         self.edges = list(combinations(range(self.num_cities), 2))
@@ -70,7 +64,6 @@ class QAOATSPSolver:
         Based on Algorithm 1 from Ruan et al. (2020):
         "The Quantum Approximate Algorithm for Solving Traveling Salesman Problem"
         
-        Complexity: O((N-1)!/2 * N) instead of O(C(N(N-1)/2, N) * N²)
         """
         from itertools import permutations
         
@@ -85,7 +78,7 @@ class QAOATSPSolver:
             # Build cycle: 0 -> perm[0] -> perm[1] -> ... -> perm[-1] -> 0
             cycle = [0] + list(perm)
             
-            # Convert cycle to edge set (canonical form to handle direction)
+            # Convert cycle to edge set
             edges = []
             for i in range(n):
                 u, v = cycle[i], cycle[(i + 1) % n]
@@ -219,8 +212,6 @@ class QAOATSPSolver:
         
         for idx, (u, v) in enumerate(self.edges):
             weight = self.dist[u][v]
-            # Term: weight * (I - Z_i)/2
-            # We ignore the constant part (weight/2 * I) for optimization
             
             # Z term
             z_str = ['I'] * self.num_qubits
@@ -276,7 +267,6 @@ class QAOATSPSolver:
                             continue
                         
                         # 8 Pauli strings per swap operation (from paper decomposition)
-                        # Coefficient 1/8 = 0.125 for each term
                         c_val = 0.125
                         term_coeffs = [c_val, -c_val, -c_val, c_val, c_val, c_val, c_val, c_val]
                         
@@ -353,15 +343,9 @@ class QAOATSPSolver:
             print("\n1. Connecting to IBM Quantum...")
             service = QiskitRuntimeService()
             
-            if self.backend_name:
-                print(f"   Using specified backend: {self.backend_name}")
-                backend = service.backend(self.backend_name)
-            elif self.use_least_busy:
-                print("   Selecting least busy operational backend...")
-                backend = service.least_busy(simulator=False, operational=True)
-                print(f"   Selected backend: {backend.name}")
-            else:
-                raise ValueError("Either backend_name must be specified or use_least_busy must be True")
+            print("   Selecting least busy operational backend...")
+            backend = service.least_busy(simulator=False, operational=True)
+            print(f"   Selected backend: {backend.name}")
             
             # 2. Build the QAOA ansatz
             print("\n2. Building QAOA ansatz...")
@@ -376,7 +360,6 @@ class QAOATSPSolver:
             print(f"   Transpiled circuit: {isa_ansatz.num_qubits} physical qubits, depth {isa_ansatz.depth()}")
             
             # Store the final layout mapping (logical qubit -> physical qubit)
-            # This is crucial for correctly interpreting measurement results
             if isa_ansatz.layout is not None:
                 self._final_layout = isa_ansatz.layout.final_index_layout()
                 print(f"   Qubit mapping (logical->physical): {self._final_layout[:self.num_qubits]}")
@@ -456,8 +439,8 @@ class QAOATSPSolver:
             final_circuit = isa_ansatz.assign_parameters(best_params)
             final_circuit.measure_all()
             
-            # Increased shots for more accurate final sampling (was 4096)
-            job = sampler.run([final_circuit], shots=8192)
+            # Increased shots for more accurate final sampling
+            job = sampler.run([final_circuit], shots=4096)
             print(f"   Job ID: {job.job_id()}")
             print("   Waiting for final results...")
             
@@ -514,7 +497,6 @@ class QAOATSPSolver:
         
         for bitstring, count in counts.items():
             # Compute cost for this bitstring
-            # Bitstring is in Qiskit format: rightmost bit = physical qubit 0
             cost = 0.0
             bs_len = len(bitstring)
             
@@ -527,7 +509,7 @@ class QAOATSPSolver:
                 else:
                     physical_idx = logical_idx  # No remapping for local simulation
                 
-                # In Qiskit bitstring, physical qubit i is at position (len-1-i) from left
+                # In Qiskit bitstring, physical qubit i is at position (len-1-i)
                 bit_pos = bs_len - 1 - physical_idx
                 if 0 <= bit_pos < bs_len:
                     bit_val = int(bitstring[bit_pos])
@@ -559,7 +541,7 @@ class QAOATSPSolver:
                 else:
                     physical_idx = logical_idx  # No remapping for local simulation
                 
-                # In Qiskit bitstring, physical qubit i is at position (len-1-i) from left
+                # physical qubit i is at position (len-1-i)
                 bit_pos = bs_len - 1 - physical_idx
                 if 0 <= bit_pos < bs_len and bs[bit_pos] == '1':
                     edges.append(self.edges[logical_idx])
@@ -589,7 +571,7 @@ class QAOATSPSolver:
             else:
                 physical_idx = logical_idx  # No remapping for local simulation
             
-            # In Qiskit bitstring, physical qubit i is at position (len-1-i) from left
+            # physical qubit i is at position (len-1-i)
             bit_pos = bs_len - 1 - physical_idx
             if 0 <= bit_pos < bs_len and bs[bit_pos] == '1':
                 edges.append(self.edges[logical_idx])
@@ -597,7 +579,7 @@ class QAOATSPSolver:
         return edges, self._calculate_cost(edges)
 
 if __name__ == "__main__":
-    # Example 4-city Matrix (Distance between cities)
+    # Example 5-city Matrix
     graph = [
         [0, 10, 15, 20, 25],
         [10, 0, 35, 25, 30],
@@ -606,27 +588,16 @@ if __name__ == "__main__":
         [25, 30, 35, 25, 0]
     ]
 
-    # --- CONFIGURATION START ---
-    USE_IBM = True 
-    # Option 1: Set to None to auto-select least busy backend
-    # Option 2: Specify a backend name like 'ibm_brisbane', 'ibm_kyoto', etc.
-    BACKEND_NAME = None  # Will use least_busy() to find best available backend
-    USE_LEAST_BUSY = True  # Only used when BACKEND_NAME is None
-    # --- CONFIGURATION END ---
-
     try:
-        print(f"Running solver with USE_IBM={USE_IBM}...")
+        print(f"Running solver with IBM...")
         
         # Initialize the solver
         # Note: Requires QiskitRuntimeService.save_account() to have been run previously
         # with your IBM Quantum API token
         solver = QAOATSPSolver(
             distance_matrix=graph, 
-            num_layers=3, 
-            optimization_steps=10,  # Keep low for real hardware (each iteration = 1 job) 
-            backend_name=BACKEND_NAME,
-            use_real_hardware=USE_IBM,
-            use_least_busy=USE_LEAST_BUSY
+            num_layers=2, 
+            optimization_steps=50
         )
         
         # Run the solver
@@ -639,7 +610,6 @@ if __name__ == "__main__":
         if best_edges:
             print(f"Edges selected: {best_edges}")
             print(f"Total Cost: {cost}")
-            # Optional: format path for readability
             print("Tour found successfully!")
         else:
             print("No valid tour found.")
