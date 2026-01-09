@@ -39,27 +39,42 @@ class TSPSolver:
                  sa_initial_temp: float = 1000,
                  sa_cooling_rate: float = 0.003,
                  sa_max_iter: int = 10000,
+                 # IBM Quantum parameters (for qaoa_ibm algorithm)
+                 ibm_backend: str = 'ibm_brisbane',
+                 ibm_token: Optional[str] = None,
+                 ibm_channel: str = 'ibm_cloud',
+                 ibm_instance: Optional[str] = None,
+                 shots: int = 1024,
+                 use_ibm_backend: bool = True,
                  **kwargs):
         """
         Initialize TSP Solver.
         
         Args:
-            algorithm: Algorithm to use ('bruteforce', 'mst', 'sim_annealing', 'qaoa')
+            algorithm: Algorithm to use ('bruteforce', 'mst', 'sim_annealing', 'qaoa', 'qaoa_ibm')
             graph: Optional distance matrix. If None, generates based on graph_type
             graph_type: Type of graph to generate ('fully_connected', 'partially_connected', 
                       'circle'). Required if graph is None.
             graph_params: Parameters for graph generation (e.g., {'num_nodes': 5, 'connectivity': 0.6})
             visualize: Whether to visualize the solution
 
-            **kwargs: Additional parameters passed to algorithms
-            # Algorithm-specific parameters
+            # QAOA parameters (for both 'qaoa' and 'qaoa_ibm')
             qaoa_layers: Number of QAOA layers
-            qaoa_learning_rate: Learning rate
+            qaoa_learning_rate: Learning rate (only for 'qaoa')
             qaoa_optimization_steps: Optimization steps
             
+            # Simulated Annealing parameters
             sa_initial_temp: Initial temperature
             sa_cooling_rate: Cooling rate
             sa_max_iter: Maximum iterations
+            
+            # IBM Quantum parameters (for 'qaoa_ibm' algorithm)
+            ibm_backend: IBM backend name (e.g., 'ibm_brisbane', 'ibm_kyoto', 'ibm_sherbrooke')
+            ibm_token: IBM Quantum API token (optional if saved)
+            ibm_channel: 'ibm_cloud' or 'ibm_quantum'
+            ibm_instance: IBM Cloud instance CRN (optional)
+            shots: Number of measurement shots
+            use_ibm_backend: If False, uses local simulation instead of real hardware
             
             **kwargs: Additional parameters passed to algorithms
         """
@@ -67,7 +82,7 @@ class TSPSolver:
         self.visualize = visualize
         
         # Validate algorithm
-        valid_algorithms = ['bruteforce', 'mst', 'sim_annealing', 'qaoa']
+        valid_algorithms = ['bruteforce', 'mst', 'sim_annealing', 'qaoa', 'qaoa_ibm']
         if self.algorithm not in valid_algorithms:
             raise ValueError(f"Invalid algorithm: {algorithm}. "
                            f"Must be one of: {valid_algorithms}")
@@ -93,6 +108,13 @@ class TSPSolver:
             'sa_initial_temp': sa_initial_temp,
             'sa_cooling_rate': sa_cooling_rate,
             'sa_max_iter': sa_max_iter,
+            # IBM Quantum parameters
+            'ibm_backend': ibm_backend,
+            'ibm_token': ibm_token,
+            'ibm_channel': ibm_channel,
+            'ibm_instance': ibm_instance,
+            'shots': shots,
+            'use_ibm_backend': use_ibm_backend,
             **kwargs
         }
         
