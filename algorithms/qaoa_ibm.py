@@ -15,7 +15,7 @@ from qiskit_algorithms.optimizers import COBYLA
 # IBM Runtime (no Session needed for Open Plan)
 from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2
 
-class QAOATSPSolver:
+class QAOAIBMSolver:
     def __init__(self, distance_matrix, 
                 num_layers=2, optimization_steps=100,
                 use_real_hardware=True):

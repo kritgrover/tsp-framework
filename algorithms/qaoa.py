@@ -167,8 +167,8 @@ class QAOATSPSolver:
         for i in range(self.num_layers):
             gamma = params[i, 0]
             beta = params[i, 1]
-            qml.evolve(self.cost_h, gamma)
-            qml.evolve(self.mixer_h, beta)
+            qml.ApproxTimeEvolution(self.cost_h, gamma, 1)
+            qml.ApproxTimeEvolution(self.mixer_h, beta, 1)
 
     def solve(self):
         """Run the full optimization loop."""
