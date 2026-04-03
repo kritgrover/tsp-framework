@@ -10,12 +10,13 @@ class QAOATSPSolver:
     Based on Ruan et al. (2020) with enhanced 2-opt constraint-preserving mixer.
     """
 
-    def __init__(self, distance_matrix, num_qaoa_layers=2, learning_rate=0.01, optimization_steps=200):
+    def __init__(self, distance_matrix, num_qaoa_layers=2, learning_rate=0.01, optimization_steps=200, num_approx=1):
         self.distance_matrix = distance_matrix
         self.num_cities = len(distance_matrix)
         self.num_layers = num_qaoa_layers
         self.learning_rate = learning_rate
         self.steps = optimization_steps
+        self.num_approx = num_approx
         
         # For N cities, we have N*(N-1)/2 edges in a complete graph
         self.num_edges = self.num_cities * (self.num_cities - 1) // 2
@@ -167,8 +168,12 @@ class QAOATSPSolver:
         for i in range(self.num_layers):
             gamma = params[i, 0]
             beta = params[i, 1]
-            qml.ApproxTimeEvolution(self.cost_h, gamma, 1)
-            qml.ApproxTimeEvolution(self.mixer_h, beta, 1)
+            if self.num_approx == 0:
+                qml.evolve(self.cost_h, gamma)
+                qml.evolve(self.mixer_h, beta)
+            else:
+                qml.ApproxTimeEvolution(self.cost_h, gamma, n=self.num_approx)
+                qml.ApproxTimeEvolution(self.mixer_h, beta, n=self.num_approx)
 
     def solve(self):
         """Run the full optimization loop."""
