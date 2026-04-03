@@ -175,6 +175,7 @@ def run_qaoa(graph: list, visualize: bool = False, **params) -> TSPSolution:
     
     # Extract parameters
     num_layers = params.get('qaoa_layers', 2)
+    num_approx = params.get('qaoa_num_approx', 0)
     learning_rate = params.get('qaoa_learning_rate', 0.01)
     optimization_steps = params.get('qaoa_optimization_steps', 200)
     
