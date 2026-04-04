@@ -167,6 +167,7 @@ def run_qaoa(graph: list, visualize: bool = False, **params) -> TSPSolution:
             - qaoa_layers: Number of QAOA layers (default: 2)
             - qaoa_learning_rate: Learning rate (default: 0.01)
             - qaoa_optimization_steps: Optimization steps (default: 200)
+            - qaoa_num_approx: ApproxTimeEvolution steps per layer; 0 uses exact evolve (default: 1)
     
     Returns:
         TSPSolution object
@@ -175,7 +176,7 @@ def run_qaoa(graph: list, visualize: bool = False, **params) -> TSPSolution:
     
     # Extract parameters
     num_layers = params.get('qaoa_layers', 2)
-    num_approx = params.get('qaoa_num_approx', 0)
+    num_approx = params.get('qaoa_num_approx', 1)
     learning_rate = params.get('qaoa_learning_rate', 0.01)
     optimization_steps = params.get('qaoa_optimization_steps', 200)
     
@@ -184,7 +185,8 @@ def run_qaoa(graph: list, visualize: bool = False, **params) -> TSPSolution:
         graph,
         num_qaoa_layers=num_layers,
         learning_rate=learning_rate,
-        optimization_steps=optimization_steps
+        optimization_steps=optimization_steps,
+        num_approx=num_approx,
     )
     
     # Run algorithm
@@ -200,6 +202,7 @@ def run_qaoa(graph: list, visualize: bool = False, **params) -> TSPSolution:
         'num_layers': num_layers,
         'learning_rate': learning_rate,
         'optimization_steps': optimization_steps,
+        'num_approx': num_approx,
         'probability': prob
     }
     
