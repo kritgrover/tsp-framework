@@ -1,15 +1,19 @@
 import sys
 import os
+import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 
 # Add parent directory to path to allow importing modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from benchmark_args import add_algorithm_args, algorithm_kwargs_from_args
 from utils.graph_generators import generate_graph
 from utils.algorithm_adapter import run_bruteforce, run_mst, run_sim_annealing, run_qaoa
 
-def run_benchmark():
+def run_benchmark(algo_kwargs=None):
+    if algo_kwargs is None:
+        algo_kwargs = {}
     # Define problem sizes (number of cities): 3 to 10
     sizes = range(3, 11)
     
@@ -33,7 +37,7 @@ def run_benchmark():
         bruteforce_cost = None
         try:
             print(f"  Running Bruteforce (baseline)...")
-            bruteforce_solution = run_bruteforce(graph)
+            bruteforce_solution = run_bruteforce(graph, **algo_kwargs)
             bruteforce_cost = bruteforce_solution.cost            
             print(f"  Baseline cost: {bruteforce_cost}")
         except Exception as e:
@@ -54,7 +58,7 @@ def run_benchmark():
             else:
                 try:
                     print(f"  Running {name}...")
-                    solution = func(graph)
+                    solution = func(graph, **algo_kwargs)
                     # Validate solution cost
                     if solution.cost is None or solution.cost == float('inf') or solution.cost <= 0:
                         print(f"  Warning: {name} returned invalid cost: {solution.cost}")
@@ -89,5 +93,10 @@ def run_benchmark():
     print(f"Plot saved to {output_path}")
 
 if __name__ == "__main__":
-    run_benchmark()
+    parser = argparse.ArgumentParser(
+        description="Compare TSP solution quality (approximation ratio vs optimal) across algorithms."
+    )
+    add_algorithm_args(parser)
+    args = parser.parse_args()
+    run_benchmark(algorithm_kwargs_from_args(args))
 

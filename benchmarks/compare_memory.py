@@ -1,15 +1,19 @@
 import sys
 import os
+import argparse
 import matplotlib.pyplot as plt
 import tracemalloc
 
 # Add parent directory to path to allow importing modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from benchmark_args import add_algorithm_args, algorithm_kwargs_from_args
 from utils.graph_generators import generate_graph
 from utils.algorithm_adapter import run_bruteforce, run_mst, run_sim_annealing, run_qaoa
 
-def run_benchmark():
+def run_benchmark(algo_kwargs=None):
+    if algo_kwargs is None:
+        algo_kwargs = {}
     # Define problem sizes
     sizes = range(3, 21)
     
@@ -42,7 +46,7 @@ def run_benchmark():
                 tracemalloc.start()
                 
                 # Run algorithm
-                solution = func(graph)
+                solution = func(graph, **algo_kwargs)
                 
                 # Get peak memory usage
                 current, peak = tracemalloc.get_traced_memory()
@@ -91,5 +95,10 @@ def run_benchmark():
     print(f"Plot saved to {output_path}")
 
 if __name__ == "__main__":
-    run_benchmark()
+    parser = argparse.ArgumentParser(
+        description="Benchmark peak memory (tracemalloc) for each TSP algorithm vs problem size."
+    )
+    add_algorithm_args(parser)
+    args = parser.parse_args()
+    run_benchmark(algorithm_kwargs_from_args(args))
 
