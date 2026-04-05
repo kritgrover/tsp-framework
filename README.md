@@ -10,6 +10,7 @@ A unified, open-source framework for solving the Traveling Salesman Problem (TSP
 - [Framework Architecture](#framework-architecture)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Benchmarking](#benchmarking)
 - [Methodology and Design Choices](#methodology-and-design-choices)
 - [Contributing](#contributing)
 
@@ -273,6 +274,66 @@ print(f"Total cost: {cost}")
 - Results include logical-to-physical qubit mapping for debugging
 
 See `main.py` for comprehensive usage examples and parameter documentation.
+
+## Benchmarking
+
+The [`benchmarks/`](benchmarks/) directory contains scripts that compare the four PennyLane-era solvers (brute force, MST, simulated annealing, and QAOA simulation) on generated graphs. They save plots under [`benchmarks/plots/`](benchmarks/plots/).
+
+| Script | Purpose |
+|--------|---------|
+| [`compare_quality.py`](benchmarks/compare_quality.py) | Approximation ratio vs brute-force optimum for sizes 3–10 |
+| [`compare_time.py`](benchmarks/compare_time.py) | Wall-clock time vs size (3–30; QAOA only to 5; brute force only to 15) |
+| [`compare_memory.py`](benchmarks/compare_memory.py) | Peak memory (tracemalloc) vs size |
+| [`case_study.py`](benchmarks/case_study.py) | Fixed 5-city graph with visualization for all four algorithms |
+
+Run from the repository root so imports resolve:
+
+```bash
+python benchmarks/compare_quality.py
+python benchmarks/compare_time.py
+python benchmarks/compare_memory.py
+python benchmarks/case_study.py
+```
+
+### Algorithm parameters (CLI)
+
+Optional flags tune the algorithms via [`utils/algorithm_adapter.py`](utils/algorithm_adapter.py). **If you omit a flag, the benchmark uses the same defaults as the adapter** (not hard-coded duplicates in the script). The MST runner has no extra keyword parameters, so there is no MST-specific flag.
+
+Shared definitions live in [`benchmarks/benchmark_args.py`](benchmarks/benchmark_args.py). Show all options:
+
+```bash
+python benchmarks/compare_quality.py --help
+```
+
+| Flag | Maps to (adapter / solver) |
+|------|----------------------------|
+| `--bf-update-frequency N` | Brute force `update_frequency` (benchmarks run with `visualize=False`; rarely needed) |
+| `--sa-initial-temp` | Simulated annealing initial temperature |
+| `--sa-cooling-rate` | Simulated annealing cooling rate |
+| `--sa-max-iter` | Simulated annealing maximum iterations |
+| `--qaoa-layers` | QAOA layer count |
+| `--qaoa-learning-rate` | QAOA Adam step size |
+| `--qaoa-steps` | QAOA optimization steps |
+| `--num-approx` | QAOA `num_approx` (ApproxTimeEvolution steps; `0` uses exact time evolution in the circuit) |
+
+### Examples
+
+Single QAOA knob (equivalent forms: space or `=`):
+
+```bash
+python benchmarks/compare_quality.py --num-approx 4
+python benchmarks/compare_quality.py --num-approx=4
+```
+
+Combine several overrides:
+
+```bash
+python benchmarks/compare_time.py --qaoa-layers 3 --qaoa-steps 100 --sa-max-iter 8000
+python benchmarks/compare_memory.py --sa-initial-temp 1500 --sa-cooling-rate 0.002
+python benchmarks/case_study.py --qaoa-learning-rate 0.02 --num-approx 2
+```
+
+These flags apply to every algorithm call in that run; each `run_*` function only reads its own parameters and ignores the rest.
 
 ## Methodology and Design Choices
 
