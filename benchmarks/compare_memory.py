@@ -73,6 +73,9 @@ def run_benchmark(algo_kwargs=None):
     for name, mems in results.items():
         valid_sizes = [s for s, m in zip(sizes, mems) if m is not None]
         valid_mems = [m for m in mems if m is not None]
+        print(f"case: {name}")
+        print(f"sizes: {valid_sizes}")
+        print(f"ratios: {valid_mems}")
         plt.plot(valid_sizes, valid_mems, marker='o', label=name, linewidth=2, markersize=6)
     
     plt.xlabel('Number of Cities')
