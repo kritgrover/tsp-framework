@@ -196,7 +196,8 @@ class QAOATSPSolver:
             params, cost = opt.step_and_cost(cost_fn, params)
             if (i+1) % 50 == 0:
                 print(f"  Step {i+1}: Cost = {cost:.4f}")
-                
+
+        print(f"num_layers: {self.num_layers}, num_approx: {self.num_approx}")
         self.optimal_params = params
         t1 = time.perf_counter()
         print(f"Optimization finished in {t1-t0:.2f}s.")
